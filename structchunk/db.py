@@ -37,7 +37,7 @@ class DB(object):
         index = leveldb.LevelDB(index_path, error_if_exists=True)
 
         db = cls(path, chunk_size, index)
-        chunk = db.new_chunk()
+        db.new_chunk()
         return db
 
     def __init__(self, path, chunk_size=None, index=None):
@@ -102,7 +102,7 @@ class DB(object):
         """
         self.index.Put(key, dumps((chunk.key, pos)), sync=sync)
 
-    def new(self, cls):
+    def new(self, cls, sync=False):
         """Create a new instance of 'cls'.
         """
         chunk = self.chunk
@@ -121,7 +121,8 @@ class DB(object):
         # advance the head pointer past the new object
         next_head = head + clssize
         chunk.head = next_head
-        chunk.flush()
+        if sync:
+            chunk.flush()
         return cls.from_chunk(chunk, head)
 
     def get(self, key, cls, default=None):

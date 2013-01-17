@@ -18,7 +18,7 @@ class Object(Structure):
     that mmap initializes new ranges to all zeros, so db.new() objects
     always start out 'null' until they are db.put().
     """
-    __slots__ = () # instances should have no unfielded attrs
+    __slots__ = ('chunk', 'pos') # instances should have no unfielded attrs
 
     _fields_ = [
         ('used', c_uint64, 1),      # bit indicates space is used
@@ -36,9 +36,8 @@ class Object(Structure):
         items = list(items)
         if kw:
             items.extend(kw.items())
-        sub = type(cls.__name__, (cls,), dict(_fields_=items))
-        sub.size = sizeof(sub)
-        return sub
+        return type(cls.__name__, (cls,), dict(__slots__=cls.__slots__,
+                                               _fields_=items))
 
     @classmethod
     def from_chunk(cls, chunk, pos):
@@ -52,7 +51,7 @@ class Object(Structure):
     @property
     def bytes(self):
         """Return the struct as bytes. Useful for debugging. """
-        return bytes(self.chunk.mmap[self.pos:self.pos+self.size])
+        return bytes(self.chunk.mmap[self.pos:self.pos+sizeof(self)])
 
 
 class Array(Object):
@@ -60,19 +59,11 @@ class Array(Object):
     """
     __slots__ = () # instances should have no unfielded attrs
 
-    _fields_ = [
-        # Object header is included
-        # due to subclassing
-        ('item_size', c_long),
-        ]
-
     @classmethod
     def of(cls, size, item):
         """Create an array of 'item' with a given size.
         """
-        sub = super(Array, cls).of(items=item * size)
-        sub.item_size = sizeof(item)
-        return sub
+        return super(Array, cls).of(items=item * size)
 
     def __getitem__(self, index):
         return self.items[index]
@@ -81,13 +72,10 @@ class Array(Object):
         self.items[index] = value
 
     def __len__(self):
-        return self.size
+        return self.items._length_
 
     def __iter__(self):
         return iter(self.items)
-
-    def __repr__(self):
-        return 'Array('+ str(len(self)) + ')'
 
 
 class Chunk(Object):
