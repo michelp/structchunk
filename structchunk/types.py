@@ -10,23 +10,28 @@ class Object(Structure):
     """A basic chunk-persisted object.  Consists of a some header
     info, and a key.
 
+    Subclasses can extend this class to provide custom fields that can
+    be any ctypes compatible type.
+
     The first bit of the header 'used' in indicates this struct is in
     use.  Clearing the first bit indicates the struct is 'null'.  Note
     that mmap initializes new ranges to all zeros, so db.new() objects
     always start out 'null' until they are db.put().
     """
+    __slots__ = () # instances should have no unfielded attrs
+
     _fields_ = [
         ('used', c_uint64, 1),      # bit indicates space is used
         ('version', c_uint64, 15),  # object version
         ('flags', c_uint64, 48),    # user flags
-        ('size', c_long),           # size of object
+        ('size', c_long),           # computed size of object
         ('key', c_char * 36),       # object key
         ]
 
     @classmethod
     def of(cls, *items, **kw):
         """Return new subclass of Object with extended fields.  Note
-        this classmethod returns another, dynamic class.
+        this classmethod returns new dynamic subclass of 'cls'.
         """
         items = list(items)
         if kw:
@@ -53,8 +58,11 @@ class Object(Structure):
 class Array(Object):
     """Sequence protocol shim around an array of objects.
     """
+    __slots__ = () # instances should have no unfielded attrs
 
     _fields_ = [
+        # Object header is included
+        # due to subclassing
         ('item_size', c_long),
         ]
 
@@ -73,13 +81,13 @@ class Array(Object):
         self.items[index] = value
 
     def __len__(self):
-        return self.items._length_
+        return self.size
 
     def __iter__(self):
         return iter(self.items)
 
     def __repr__(self):
-        return 'Array('+ str(len(self)) + ', ' + repr(list(self)) + ')'
+        return 'Array('+ str(len(self)) + ')'
 
 
 class Chunk(Object):
@@ -89,7 +97,11 @@ class Chunk(Object):
     All sub-objects in chunks are offset into the Chunk file at some
     position.
     """
+    __slots__ = ('chunk', 'mmap',)
+
     _fields_ = [
+        # Object header is included
+        # due to subclassing
         ('head', c_long),       # the start of free space
         ('created', c_double),  # when the chunk was created
         ]
