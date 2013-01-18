@@ -91,7 +91,8 @@ class DB(object):
 
         TODO: use a struct not pickle
         """
-        chunk_key, pos = loads(self.index.Get(key))
+        chunk_key, pos = self.index.Get(key).split(':')[:2]
+        pos = int(pos)
         chunk = self.chunks[uuid.UUID(chunk_key)]
         return chunk, pos
 
@@ -100,7 +101,7 @@ class DB(object):
 
         TODO: use a struct not pickle
         """
-        self.index.Put(key, dumps((chunk.key, pos)), sync=sync)
+        self.index.Put(key, ':'.join((chunk.key, str(pos))), sync=sync)
 
     def new(self, cls, sync=False):
         """Create a new instance of 'cls'.
@@ -133,16 +134,14 @@ class DB(object):
             return default
         return cls.from_chunk(obj, pos)
 
-    def put(self, obj, sync=True):
+    def put(self, key, obj, sync=True):
         """ Put an instance in the store. 
 
         If the object has a false key one will be generated.
         The object's map space will be marked as used.
         """
-        if not obj.key:
-            obj.key = str(uuid.uuid1())
         obj.used = True
-        self._set_obj_pos(obj.key, obj.chunk, obj.pos, sync)
+        self._set_obj_pos(key, obj.chunk, obj.pos, sync)
         if sync:
             obj.chunk.flush()
 

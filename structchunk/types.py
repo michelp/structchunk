@@ -2,13 +2,16 @@ import os
 import time
 import uuid
 import mmap
+from operator import attrgetter
 
 from ctypes import *
 
 
+c_uuid = c_char * 36
+
+
 class Object(Structure):
-    """A basic chunk-persisted object.  Consists of a some header
-    info, and a key.
+    """A basic chunk-persisted object.
 
     Subclasses can extend this class to provide custom fields that can
     be any ctypes compatible type.
@@ -18,14 +21,13 @@ class Object(Structure):
     that mmap initializes new ranges to all zeros, so db.new() objects
     always start out 'null' until they are db.put().
     """
-    __slots__ = ('chunk', 'pos') # instances should have no unfielded attrs
+    __slots__ = ('chunk', 'pos')
 
     _fields_ = [
         ('used', c_uint64, 1),      # bit indicates space is used
         ('version', c_uint64, 15),  # object version
         ('flags', c_uint64, 48),    # user flags
         ('size', c_long),           # computed size of object
-        ('key', c_char * 36),       # object key
         ]
 
     @classmethod
@@ -57,19 +59,26 @@ class Object(Structure):
 class Array(Object):
     """Sequence protocol shim around an array of objects.
     """
-    __slots__ = () # instances should have no unfielded attrs
+    __slots__ = ('chunk', 'pos')
 
     @classmethod
-    def of(cls, size, item):
+    def of(cls, size, item, *args, **kw):
         """Create an array of 'item' with a given size.
         """
-        return super(Array, cls).of(items=item * size)
+        kw['items'] = item * size
+        return super(Array, cls).of(*args, **kw)
 
-    def __getitem__(self, index):
+    def  __getitem__(self, index):
         return self.items[index]
 
     def __setitem__(self, index, value):
         self.items[index] = value
+
+    def __delitem__(self, index):
+        item = self.items[index]
+        if not isinstance(item, Object):
+            raise TypeError("Cannot delete item of type %s" % type(item))
+        self.items[index].used = False
 
     def __len__(self):
         return self.items._length_
@@ -77,6 +86,46 @@ class Array(Object):
     def __iter__(self):
         return iter(self.items)
 
+    def __reversed__(self):
+        return reversed(self.items)
+
+
+class Ring(Array):
+    """ A ring buffer.
+
+    Keeps a 'head' field that indicates the current zeroth position of
+    the ring.  Prepend pushes a new item to the 'front' of the ring,
+    and 'append' pushes a new item to the 'back'.  If the ring is
+    full, one end or the other will be overwritten.  'get' retrieves
+    items indexed relative to the head.  'forward' and 'reverse' are
+    used to iterate the ring, relative to the head.
+    """
+    _fields_ = [
+        ('head', c_int),
+        ]
+
+    def prepend(self, item):
+        self.head = (self.head - 1) % len(self)
+        if isinstance(item, Object):
+            item.used = True
+        self.items[self.head] = item
+
+    def append(self, item):
+        if isinstance(item, Object):
+            item.used = True
+        self.items[self.head] = item
+        self.head = (self.head + 1) % len(self)
+
+    def __getitem__(self, offset):
+        return Array.__getitem__(self, (self.head + offset) % len(self))
+
+    def __iter__(self):
+        for i in xrange(self.head, self.head + len(self), 1):
+            yield item
+
+    def __reversed__(self):
+        for i in xrange(self.head, self.head - len(self), -1):
+            yield item
 
 class Chunk(Object):
     """File-backed object container.
@@ -90,6 +139,7 @@ class Chunk(Object):
     _fields_ = [
         # Object header is included
         # due to subclassing
+        ('key', c_uuid),        # object key
         ('head', c_long),       # the start of free space
         ('created', c_double),  # when the chunk was created
         ]
