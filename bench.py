@@ -13,6 +13,8 @@ o_test = Array.of(test_size, Array.of(test_size, Object.of(iint=c_int, idouble=c
 r_test = Ring.of(32, c_int)
 randi = lambda: randint(0, 127)
 
+ObjectPointer = POINTER(Object)
+
 O = Object.of(a=c_int, b=c_double)
 R = Ring.of(32, O)
 

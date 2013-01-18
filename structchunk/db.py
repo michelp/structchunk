@@ -145,14 +145,14 @@ class DB(object):
         if sync:
             obj.chunk.flush()
 
-    def delete(self, obj, sync=True):
+    def delete(self, key, sync=True):
         """ Remove an instance from the index.
 
         The objects map space will be marked as unused.  Note this
         does not reclaim any store space, the objects space
         effectively becomes a "hole".
         """
-        self.index.Delete(obj.key, sync)
+        self.index.Delete(key, sync)
         obj.used = False
         if sync:
             obj.chunk.flush()

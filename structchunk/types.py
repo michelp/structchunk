@@ -100,6 +100,8 @@ class Ring(Array):
     items indexed relative to the head.  'forward' and 'reverse' are
     used to iterate the ring, relative to the head.
     """
+    __slots__ = ('chunk', 'pos')
+
     _fields_ = [
         ('head', c_int),
         ]
@@ -116,16 +118,6 @@ class Ring(Array):
         self.items[self.head] = item
         self.head = (self.head + 1) % len(self)
 
-    def __getitem__(self, offset):
-        return Array.__getitem__(self, (self.head + offset) % len(self))
-
-    def __iter__(self):
-        for i in xrange(self.head, self.head + len(self), 1):
-            yield item
-
-    def __reversed__(self):
-        for i in xrange(self.head, self.head - len(self), -1):
-            yield item
 
 class Chunk(Object):
     """File-backed object container.
